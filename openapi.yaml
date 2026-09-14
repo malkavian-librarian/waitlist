@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: Waitlist API
+  version: 1.0.0
+  description: >
+    Local-first Thai Restaurant Waitlist Manager API. SQLite by default via
+    SQLAlchemy (`DATABASE_URL` unset), Postgres when `DATABASE_URL` points at
+    Postgres. This file is the API agreement — keep it in sync with
+    `backend/app` and `frontend/src/services/api.ts`.
+servers:
+  - url: http://localhost:8000
+    description: Local backend (`uvicorn backend.app.main:app --reload --port 8000`)
+tags:
+  - name: health
+  - name: waitlist
+  - name: lottery
+  - name: settings
+  - name: reservations
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      operationId: health
+      responses:
+        '200':
+          description: Backend is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /api/waitlist:
+    get:
+      tags: [waitlist]
+      operationId: listWaitlist
+      responses:
+        '200':
+          description: All entries, ordered by joined_at ascending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WaitlistEntry'
+    post:
+      tags: [waitlist]
+      operationId: createWaitlistEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaitlistCreate'
+      responses:
+        '201':
+          description: Created (status is always `waiting`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitlistEntry'
+
+  /api/waitlist/{entry_id}/seat:
+    patch:
+      tags: [waitlist]
+      operationId: seatWaitlistEntry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaitlistSeat'
+      responses:
+        '200':
+          description: Seated (server computes seated_at + wait_minutes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitlistEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/waitlist/{entry_id}/status:
+    patch:
+      tags: [waitlist]
+      operationId: setWaitlistStatus
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaitlistStatusUpdate'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitlistEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/waitlist/{entry_id}/spice:
+    patch:
+      tags: [waitlist]
+      operationId: setSpiceResult
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaitlistSpice'
+      responses:
+        '200':
+          description: Spice result saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitlistEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/waitlist/{entry_id}:
+    delete:
+      tags: [waitlist]
+      operationId: deleteWaitlistEntry
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/lottery:
+    get:
+      tags: [lottery]
+      operationId: getLottery
+      parameters:
+        - name: lottery_date
+          in: query
+          required: false
+          description: Defaults to today when omitted
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lottery row for the day, or null when not drawn
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/DailyLottery'
+                  - type: 'null'
+
+  /api/lottery/draw:
+    post:
+      tags: [lottery]
+      operationId: drawLottery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotteryDraw'
+      responses:
+        '200':
+          description: Created or updated lottery row for the day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyLottery'
+
+  /api/settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      responses:
+        '200':
+          description: Singleton row (id is always 1; created with defaults when missing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantSettings'
+    put:
+      tags: [settings]
+      operationId: saveSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestaurantSettings'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantSettings'
+
+  /api/reservations:
+    get:
+      tags: [reservations]
+      operationId: listReservations
+      responses:
+        '200':
+          description: All reservations ordered by date then time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reservation'
+    post:
+      tags: [reservations]
+      operationId: createReservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationCreate'
+      responses:
+        '201':
+          description: Created (status is always `confirmed`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+
+  /api/reservations/{res_id}/cancel:
+    patch:
+      tags: [reservations]
+      operationId: cancelReservation
+      parameters:
+        - $ref: '#/components/parameters/ResId'
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reservations/{res_id}/seat:
+    post:
+      tags: [reservations]
+      operationId: seatReservation
+      description: >
+        Transactional seat: marks the reservation `seated` AND creates the
+        matching seated waitlist entry in one call.
+      parameters:
+        - $ref: '#/components/parameters/ResId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationSeat'
+      responses:
+        '200':
+          description: Seated reservation plus the created waitlist entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatReservationResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reservations/{res_id}:
+    delete:
+      tags: [reservations]
+      operationId: deleteReservation
+      parameters:
+        - $ref: '#/components/parameters/ResId'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    EntryId:
+      name: entry_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ResId:
+      name: res_id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Health:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          example: true
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+
+    WaitlistEntry:
+      type: object
+      required: [id, name, party_size, status, lucky_number, joined_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+        phone:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [waiting, seated, completed, no_show]
+        table_number:
+          type: [integer, 'null']
+        lucky_number:
+          type: integer
+          minimum: 1
+          maximum: 99
+        spice_roulette:
+          type: [string, 'null']
+          enum: [Mild, Medium, Hot, Fire, Volcano, null]
+        joined_at:
+          type: string
+          format: date-time
+        seated_at:
+          type: [string, 'null']
+          format: date-time
+        wait_minutes:
+          type: [integer, 'null']
+        notes:
+          type: [string, 'null']
+
+    WaitlistCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 2
+        phone:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+
+    WaitlistSeat:
+      type: object
+      properties:
+        table_number:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 50
+
+    WaitlistStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [waiting, seated, completed, no_show]
+
+    WaitlistSpice:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: string
+          enum: [Mild, Medium, Hot, Fire, Volcano]
+
+    DailyLottery:
+      type: object
+      required: [id, lottery_date, lucky_number]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lottery_date:
+          type: string
+          format: date
+        winner_entry_id:
+          type: [string, 'null']
+        drawn_at:
+          type: [string, 'null']
+          format: date-time
+        lucky_number:
+          type: integer
+          minimum: 1
+          maximum: 99
+
+    LotteryDraw:
+      type: object
+      required: [winner_entry_id]
+      properties:
+        winner_entry_id:
+          type: string
+        lottery_date:
+          type: string
+          format: date
+          description: Defaults to today when omitted
+
+    RestaurantSettings:
+      type: object
+      required: [restaurant_name, table_count, default_wait_estimate, buddha_blessing_threshold]
+      properties:
+        id:
+          type: integer
+          default: 1
+          example: 1
+        restaurant_name:
+          type: string
+          default: Sawasdee
+        table_count:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 12
+        default_wait_estimate:
+          type: integer
+          minimum: 0
+          maximum: 120
+          default: 15
+        buddha_blessing_threshold:
+          type: integer
+          minimum: 5
+          maximum: 120
+          default: 30
+
+    Reservation:
+      type: object
+      required: [id, name, party_size, reservation_date, reservation_time, status, lucky_number, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+        phone:
+          type: [string, 'null']
+        reservation_date:
+          type: string
+          format: date
+        reservation_time:
+          type: string
+          format: time
+          example: '18:30:00'
+        status:
+          type: string
+          enum: [confirmed, seated, cancelled, no_show]
+        table_number:
+          type: [integer, 'null']
+        notes:
+          type: [string, 'null']
+        lucky_number:
+          type: integer
+          minimum: 1
+          maximum: 99
+        created_at:
+          type: string
+          format: date-time
+
+    ReservationCreate:
+      type: object
+      required: [name, reservation_date, reservation_time]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        party_size:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 2
+        phone:
+          type: [string, 'null']
+        reservation_date:
+          type: string
+          format: date
+        reservation_time:
+          type: string
+          format: time
+        notes:
+          type: [string, 'null']
+        table_number:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 50
+
+    ReservationSeat:
+      type: object
+      properties:
+        table_number:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 50
+
+    SeatReservationResult:
+      type: object
+      required: [reservation, waitlist_entry]
+      properties:
+        reservation:
+          $ref: '#/components/schemas/Reservation'
+        waitlist_entry:
+          $ref: '#/components/schemas/WaitlistEntry'

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, type WaitlistEntry, type DailyLottery, type RestaurantSettings, type Reservation } from '@/lib/supabase';
+import { service, type WaitlistEntry, type DailyLottery, type RestaurantSettings, type Reservation } from '@/services';
 import { getFortuneWaitMessage } from '@/lib/fortunes';
 import AddPartyForm from '@/components/AddPartyForm';
 import WaitlistCard from '@/components/WaitlistCard';
@@ -10,6 +10,10 @@ import ReservationsPanel from '@/components/ReservationsPanel';
 import { UtensilsCrossed, Crown, Clock, Users, Armchair, Sparkles, Star, Settings as SettingsIcon, CalendarDays, ListOrdered } from 'lucide-react';
 
 type Tab = 'waitlist' | 'reservations';
+
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0];
+}
 
 export default function App() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
@@ -23,7 +27,6 @@ export default function App() {
   const [spiceEntry, setSpiceEntry] = useState<WaitlistEntry | null>(null);
   const [tab, setTab] = useState<Tab>('waitlist');
 
-  // Force re-render every 30s for live wait time updates
   const [, setTick] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 30000);
@@ -34,26 +37,17 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const [entriesRes, lotteryRes, settingsRes, reservationsRes] = await Promise.all([
-        supabase.from('waitlist_entries').select('*').order('joined_at', { ascending: true }),
-        supabase
-          .from('daily_lottery')
-          .select('*')
-          .eq('lottery_date', new Date().toISOString().split('T')[0])
-          .maybeSingle(),
-        supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle(),
-        supabase.from('reservations').select('*').order('reservation_date', { ascending: true }),
+      const [entryData, lotteryData, settingsData, reservationData] = await Promise.all([
+        service.listEntries(),
+        service.getLottery(todayStr()),
+        service.getSettings(),
+        service.listReservations(),
       ]);
 
-      if (entriesRes.error) throw entriesRes.error;
-      if (lotteryRes.error) throw lotteryRes.error;
-      if (settingsRes.error) throw settingsRes.error;
-      if (reservationsRes.error) throw reservationsRes.error;
-
-      setEntries(entriesRes.data || []);
-      setLottery(lotteryRes.data);
-      setSettings(settingsRes.data as RestaurantSettings);
-      setReservations(reservationsRes.data || []);
+      setEntries(entryData);
+      setLottery(lotteryData);
+      setSettings(settingsData);
+      setReservations(reservationData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -70,135 +64,133 @@ export default function App() {
   const restaurantName = settings?.restaurant_name ?? 'Sawasdee';
 
   const handleAdd = async (name: string, partySize: number, phone: string, notes: string) => {
-    const insertData: Record<string, unknown> = { name, party_size: partySize, status: 'waiting' };
-    if (phone) insertData.phone = phone;
-    if (notes) insertData.notes = notes;
-    const { data, error: insertError } = await supabase
-      .from('waitlist_entries').insert(insertData).select().single();
-    if (insertError) { setError(insertError.message); throw insertError; }
-    if (data) setEntries((prev) => [...prev, data as WaitlistEntry]);
+    try {
+      const data = await service.addParty(name, partySize, phone, notes);
+      setEntries((prev) => [...prev, data]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add party';
+      setError(msg);
+      throw err;
+    }
   };
 
   const handleSeat = async (entry: WaitlistEntry) => {
-    const waitMs = Date.now() - new Date(entry.joined_at).getTime();
-    const waitMinutes = Math.floor(waitMs / 60000);
-    const { data, error: updateError } = await supabase
-      .from('waitlist_entries')
-      .update({ status: 'seated', table_number: entry.table_number, seated_at: new Date().toISOString(), wait_minutes: waitMinutes })
-      .eq('id', entry.id).select().single();
-    if (updateError) { setError(updateError.message); return; }
-    if (data) setEntries((prev) => prev.map((e) => (e.id === entry.id ? data as WaitlistEntry : e)));
+    try {
+      const data = await service.seatParty(entry);
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? data : e)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to seat party');
+    }
   };
 
   const handleComplete = async (id: string) => {
-    const { error: updateError } = await supabase.from('waitlist_entries').update({ status: 'completed' }).eq('id', id);
-    if (updateError) { setError(updateError.message); return; }
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'completed' } : e)));
+    try {
+      const data = await service.completeParty(id);
+      setEntries((prev) => prev.map((e) => (e.id === id ? data : e)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to complete party');
+    }
   };
 
   const handleNoShow = async (id: string) => {
-    const { error: updateError } = await supabase.from('waitlist_entries').update({ status: 'no_show' }).eq('id', id);
-    if (updateError) { setError(updateError.message); return; }
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status: 'no_show' } : e)));
+    try {
+      const data = await service.noShowParty(id);
+      setEntries((prev) => prev.map((e) => (e.id === id ? data : e)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark no-show');
+    }
   };
 
   const handleRemove = async (id: string) => {
-    const { error: deleteError } = await supabase.from('waitlist_entries').delete().eq('id', id);
-    if (deleteError) { setError(deleteError.message); return; }
-    setEntries((prev) => prev.filter((e) => e.id !== id));
+    try {
+      await service.removeEntry(id);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove entry');
+    }
   };
 
   const handleSpiceResult = async (result: string) => {
     if (!spiceEntry) return;
-    const { data, error: updateError } = await supabase
-      .from('waitlist_entries').update({ spice_roulette: result }).eq('id', spiceEntry.id).select().single();
-    if (updateError) { setError(updateError.message); }
-    else if (data) setEntries((prev) => prev.map((e) => (e.id === spiceEntry.id ? data as WaitlistEntry : e)));
+    try {
+      const data = await service.setSpice(spiceEntry.id, result);
+      setEntries((prev) => prev.map((e) => (e.id === spiceEntry.id ? data : e)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save spice result');
+    }
     setSpiceEntry(null);
   };
 
   const handleLotteryDraw = async (winnerId: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const { data: existing } = await supabase.from('daily_lottery').select('*').eq('lottery_date', today).maybeSingle();
-    if (existing) {
-      const { data, error: updateError } = await supabase
-        .from('daily_lottery').update({ winner_entry_id: winnerId, drawn_at: new Date().toISOString() }).eq('id', existing.id).select().single();
-      if (updateError) { setError(updateError.message); return; }
+    try {
+      const data = await service.drawLottery(winnerId, todayStr());
       setLottery(data);
-    } else {
-      const { data, error: insertError } = await supabase
-        .from('daily_lottery').insert({ lottery_date: today, winner_entry_id: winnerId, drawn_at: new Date().toISOString() }).select().single();
-      if (insertError) { setError(insertError.message); return; }
-      setLottery(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to draw lottery');
+      return;
     }
     setShowLottery(false);
     await fetchData();
   };
 
   const handleSaveSettings = async (newSettings: RestaurantSettings) => {
-    const { error: upsertError } = await supabase.from('restaurant_settings').upsert({
-      id: 1,
-      restaurant_name: newSettings.restaurant_name,
-      table_count: newSettings.table_count,
-      default_wait_estimate: newSettings.default_wait_estimate,
-      buddha_blessing_threshold: newSettings.buddha_blessing_threshold,
-    }).eq('id', 1);
-    if (upsertError) { setError(upsertError.message); throw upsertError; }
-    setSettings(newSettings);
+    try {
+      const data = await service.saveSettings(newSettings);
+      setSettings(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save settings';
+      setError(msg);
+      throw err;
+    }
   };
 
-  // Reservation handlers
   const handleAddReservation = async (data: { name: string; party_size: number; phone: string; reservation_date: string; reservation_time: string; notes: string; table_number: number | null }) => {
-    const insertData: Record<string, unknown> = {
-      name: data.name,
-      party_size: data.party_size,
-      reservation_date: data.reservation_date,
-      reservation_time: data.reservation_time,
-      status: 'confirmed',
-    };
-    if (data.phone) insertData.phone = data.phone;
-    if (data.notes) insertData.notes = data.notes;
-    if (data.table_number) insertData.table_number = data.table_number;
-    const { data: result, error: insertError } = await supabase
-      .from('reservations').insert(insertData).select().single();
-    if (insertError) { setError(insertError.message); throw insertError; }
-    if (result) setReservations((prev) => [...prev, result as Reservation]);
+    try {
+      const result = await service.addReservation({
+        name: data.name,
+        party_size: data.party_size,
+        phone: data.phone,
+        reservation_date: data.reservation_date,
+        reservation_time: data.reservation_time,
+        notes: data.notes,
+        table_number: data.table_number,
+      });
+      setReservations((prev) => [...prev, result]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add reservation';
+      setError(msg);
+      throw err;
+    }
   };
 
   const handleSeatReservation = async (res: Reservation) => {
-    const { error: updateError } = await supabase
-      .from('reservations').update({ status: 'seated', table_number: res.table_number }).eq('id', res.id);
-    if (updateError) { setError(updateError.message); return; }
-    // Also create a waitlist entry that's already seated
-    const { data: wlEntry, error: wlError } = await supabase
-      .from('waitlist_entries').insert({
-        name: res.name,
-        party_size: res.party_size,
-        phone: res.phone,
-        status: 'seated',
-        table_number: res.table_number,
-        notes: res.notes ? `Reservation ${res.reservation_time}. ${res.notes}` : `Reservation ${res.reservation_time}`,
-        seated_at: new Date().toISOString(),
-        wait_minutes: 0,
-      }).select().single();
-    if (wlError) { setError(wlError.message); return; }
-    if (wlEntry) setEntries((prev) => [...prev, wlEntry as WaitlistEntry]);
-    setReservations((prev) => prev.map((r) => (r.id === res.id ? { ...r, status: 'seated', table_number: res.table_number } : r)));
+    try {
+      const { reservation, entry } = await service.seatReservation(res);
+      setEntries((prev) => [...prev, entry]);
+      setReservations((prev) => prev.map((r) => (r.id === res.id ? reservation : r)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to seat reservation');
+    }
   };
 
   const handleCancelReservation = async (id: string) => {
-    const { error: updateError } = await supabase.from('reservations').update({ status: 'cancelled' }).eq('id', id);
-    if (updateError) { setError(updateError.message); return; }
-    setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'cancelled' } : r)));
+    try {
+      const data = await service.cancelReservation(id);
+      setReservations((prev) => prev.map((r) => (r.id === id ? data : r)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel reservation');
+    }
   };
 
   const handleRemoveReservation = async (id: string) => {
-    const { error: deleteError } = await supabase.from('reservations').delete().eq('id', id);
-    if (deleteError) { setError(deleteError.message); return; }
-    setReservations((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await service.removeReservation(id);
+      setReservations((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove reservation');
+    }
   };
 
-  // Derived data
   const waiting = entries.filter((e) => e.status === 'waiting');
   const seated = entries.filter((e) => e.status === 'seated');
   const completed = entries.filter((e) => e.status === 'completed' || e.status === 'no_show');
@@ -215,14 +207,13 @@ export default function App() {
   const tukTukProgress = entries.length > 0 ? (seated.length / entries.length) * 100 : 0;
 
   const todayReservations = reservations.filter(
-    (r) => r.reservation_date === new Date().toISOString().split('T')[0] && r.status === 'confirmed'
+    (r) => r.reservation_date === todayStr() && r.status === 'confirmed'
   ).length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-amber-950/20 text-amber-50">
       <div className="h-1.5 bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600" />
 
-      {/* Header */}
       <header className="max-w-3xl mx-auto px-4 pt-8 pb-4">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-3">
@@ -256,7 +247,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Stats bar */}
       <div className="max-w-3xl mx-auto px-4 pb-4">
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
           <div className="bg-stone-900/60 rounded-2xl border border-amber-500/15 p-3 text-center">
@@ -281,7 +271,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tuk-tuk progress bar */}
         {entries.length > 0 && (
           <div className="mt-3 bg-stone-900/40 rounded-xl border border-amber-500/10 p-3">
             <div className="flex items-center justify-between mb-1.5">
@@ -296,7 +285,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Daily lucky number */}
         {dailyLuckyNumber !== null && (
           <div className="mt-3 flex items-center justify-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl py-2">
             <Star className="w-4 h-4 text-amber-400" />
@@ -308,7 +296,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Tab switcher */}
       <div className="max-w-3xl mx-auto px-4 mb-4">
         <div className="flex gap-1 bg-stone-900/60 rounded-xl border border-amber-500/10 p-1">
           <button
@@ -332,7 +319,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main content */}
       <main className="max-w-3xl mx-auto px-4 pb-12">
         {error && (
           <div className="mb-4 bg-red-500/15 border border-red-500/30 rounded-xl p-3 text-red-300 text-sm">
@@ -429,7 +415,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="max-w-3xl mx-auto px-4 pb-8">
         <p className="text-center text-amber-200/20 text-xs">
           {avgWait > 0 && `Average wait: ${avgWait} min · `}
@@ -437,7 +422,6 @@ export default function App() {
         </p>
       </footer>
 
-      {/* Modals */}
       {showLottery && (
         <GoldenTableLottery eligibleEntries={eligibleForLottery} onDraw={handleLotteryDraw} onClose={() => setShowLottery(false)} alreadyDrawn={lotteryDrawn} />
       )}

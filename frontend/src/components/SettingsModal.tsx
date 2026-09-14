@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Settings as SettingsIcon, Store, Armchair, Clock, Sparkles } from 'lucide-react';
-import type { RestaurantSettings } from '@/lib/supabase';
+import type { RestaurantSettings } from '@/services';
 
 type Props = {
   settings: RestaurantSettings;

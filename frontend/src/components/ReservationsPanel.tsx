@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { CalendarDays, Plus, X, Users, Phone, Trash2, Armchair, Check, Star, MessageSquare, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Reservation } from '@/lib/supabase';
+import type { Reservation } from '@/services';
 
 type Props = {
   reservations: Reservation[];

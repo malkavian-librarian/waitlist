@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Crown, Sparkles, Trophy } from 'lucide-react';
-import type { WaitlistEntry } from '@/lib/supabase';
+import type { WaitlistEntry } from '@/services';
 
 type Props = {
   eligibleEntries: WaitlistEntry[];

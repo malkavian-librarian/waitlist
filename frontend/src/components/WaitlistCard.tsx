@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Clock, Users, Hash, Phone, Trash2, Armchair, Flame, Star, MessageSquare, X, Check } from 'lucide-react';
-import type { WaitlistEntry } from '@/lib/supabase';
+import type { WaitlistEntry } from '@/services';
 import { getFortuneWaitMessage } from '@/lib/fortunes';
 
 type Props = {
