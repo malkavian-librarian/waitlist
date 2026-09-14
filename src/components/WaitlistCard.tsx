@@ -6,6 +6,8 @@ import { getFortuneWaitMessage } from '@/lib/fortunes';
 type Props = {
   entry: WaitlistEntry;
   luckyNumber: number | null;
+  tableCount: number;
+  blessingThreshold: number;
   onSeat: (entry: WaitlistEntry) => void;
   onRemove: (id: string) => void;
   onComplete: (id: string) => void;
@@ -17,6 +19,8 @@ type Props = {
 export default function WaitlistCard({
   entry,
   luckyNumber,
+  tableCount,
+  blessingThreshold,
   onSeat,
   onRemove,
   onComplete,
@@ -30,12 +34,12 @@ export default function WaitlistCard({
   const waitMs = Date.now() - new Date(entry.joined_at).getTime();
   const waitMinutes = Math.floor(waitMs / 60000);
   const isLuckyMatch = luckyNumber !== null && entry.lucky_number === luckyNumber;
-  const isBlessed = waitMinutes >= 30 && entry.status === 'waiting';
+  const isBlessed = waitMinutes >= blessingThreshold && entry.status === 'waiting';
 
   const handleSeat = (e: React.FormEvent) => {
     e.preventDefault();
     const table = parseInt(tableNumber, 10);
-    if (isNaN(table) || table < 1 || table > 30) return;
+    if (isNaN(table) || table < 1 || table > tableCount) return;
     onSeat({ ...entry, table_number: table });
     setTableNumber('');
     setShowSeatForm(false);
@@ -166,7 +170,7 @@ export default function WaitlistCard({
             <input
               type="number"
               min={1}
-              max={30}
+              max={tableCount}
               value={tableNumber}
               onChange={(e) => setTableNumber(e.target.value)}
               placeholder="Table number"

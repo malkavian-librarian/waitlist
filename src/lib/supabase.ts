@@ -27,3 +27,25 @@ export type DailyLottery = {
   drawn_at: string | null;
   lucky_number: number;
 };
+
+export type RestaurantSettings = {
+  id: number;
+  restaurant_name: string;
+  table_count: number;
+  default_wait_estimate: number;
+  buddha_blessing_threshold: number;
+};
+
+export type Reservation = {
+  id: string;
+  name: string;
+  party_size: number;
+  phone: string | null;
+  reservation_date: string;
+  reservation_time: string;
+  status: 'confirmed' | 'seated' | 'cancelled' | 'no_show';
+  table_number: number | null;
+  notes: string | null;
+  lucky_number: number;
+  created_at: string;
+};
