@@ -3,9 +3,8 @@ info:
   title: Waitlist API
   version: 1.0.0
   description: >
-    Local-first Thai Restaurant Waitlist Manager API. SQLite by default via
-    SQLAlchemy (`DATABASE_URL` unset), Postgres when `DATABASE_URL` points at
-    Postgres. This file is the API agreement — keep it in sync with
+    Local-first Thai Restaurant Waitlist Manager API. Postgres via SQLAlchemy
+    (`DATABASE_URL`, default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`). This file is the API agreement — keep it in sync with
     `backend/app` and `frontend/src/services/api.ts`.
 servers:
   - url: http://localhost:8000

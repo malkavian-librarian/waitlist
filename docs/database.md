@@ -2,12 +2,15 @@
 
 ## Engine selection
 
-- `backend/app/config.py` reads `DATABASE_URL`, default `sqlite:///./waitlist.db`.
-- `backend/app/database.py` builds the SQLAlchemy engine (with `check_same_thread: False` for SQLite only).
-- To switch to Postgres, set e.g.:
+- `backend/app/config.py` reads `DATABASE_URL`,
+  default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`.
+- `backend/app/database.py` builds the SQLAlchemy engine (with `pool_pre_ping`
+  and `check_same_thread: False` for SQLite test overrides only).
+- `docker-compose.yaml` runs Postgres (`db`) + the app and points `DATABASE_URL`
+  at the `db` host. Local API against local Postgres:
 
 ```sh
-DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/waitlist uvicorn backend.app.main:app --port 8000
+DATABASE_URL=postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist uvicorn backend.app.main:app --port 8000
 ```
 
 No code change needed — models use portable types only.
@@ -23,6 +26,7 @@ No code change needed — models use portable types only.
 
 ## Schema management
 
-- `Base.metadata.create_all(bind=engine)` runs on backend startup (`backend/app/main.py`).
-- There is no migration tooling yet; for Postgres later, add Alembic with
+- `Base.metadata.create_all(bind=engine)` runs on backend startup (`backend/app/main.py`),
+  with retry while the DB becomes reachable.
+- There is no migration tooling yet; to add it, use Alembic with
   `DATABASE_URL` as the source and generate the initial revision from these models.

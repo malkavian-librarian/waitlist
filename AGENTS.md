@@ -2,7 +2,7 @@
 
 ## Layout
 
-- `backend/` — FastAPI + SQLAlchemy app and its tests. SQLite by default, Postgres via `DATABASE_URL`.
+- `backend/` — FastAPI + SQLAlchemy app and its tests. Postgres via `DATABASE_URL`.
 - `frontend/` — Vite + React + TypeScript app. All backend calls go through `frontend/src/services/`.
 - `docs/` — supporting documentation.
 - `openapi.yaml` — the API agreement. Source of truth for the HTTP contract.
@@ -24,14 +24,17 @@
   `ApiService`, and `MockService` together. Keep field names snake_case to match the DB.
 - Verify visually in Swagger: open `openapi.yaml` in the Swagger editor (or serve it with Swagger UI).
 
-## Database: SQLite locally, Postgres later
+## Database: Postgres
 
 - SQLAlchemy models in `backend/app/models.py` use portable column types only
   (`String`, `Integer`, `Date/DateTime/Time`, `Text`) — no Postgres-only types.
-- IDs are `String(36)` UUIDs so SQLite and Postgres behave identically.
-- Connection comes from `DATABASE_URL` (`backend/app/config.py`, default `sqlite:///./waitlist.db`).
-  Switch with e.g. `DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/waitlist`.
-- Schema is created via `Base.metadata.create_all` on startup; no migration tooling yet.
+- IDs are `String(36)` UUIDs.
+- Connection comes from `DATABASE_URL` (`backend/app/config.py`,
+  default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`).
+  `docker-compose.yaml` runs Postgres (`db`) + the app and sets `DATABASE_URL`
+  to the `db` host. Tests override `DATABASE_URL` with a temp SQLite file.
+- Schema is created via `Base.metadata.create_all` on startup (with retry while
+  the DB becomes reachable); no migration tooling yet.
 
 ## Commands
 

@@ -19,7 +19,7 @@ waitlist/
   `localStorage`, so the whole app runs with no backend.
 - `VITE_USE_MOCK=false` → `ApiService`: `fetch` against `VITE_API_URL`
   (default `http://localhost:8000`), which serves the FastAPI backend.
-- The backend is stateless HTTP over SQLAlchemy; SQLite locally, Postgres via `DATABASE_URL`.
+- The backend is stateless HTTP over SQLAlchemy + Postgres (`DATABASE_URL`).
 
 ## Key decisions
 

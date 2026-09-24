@@ -8,8 +8,9 @@ import type {
 } from './types';
 
 function baseUrl(): string {
-  const url = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
-  return url.replace(/\/$/, '');
+  const raw = import.meta.env.VITE_API_URL as string | undefined;
+  if (raw === undefined) return 'http://localhost:8000';
+  return raw.replace(/\/$/, '');
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
