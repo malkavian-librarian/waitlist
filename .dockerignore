@@ -5,9 +5,6 @@ __pycache__
 *.pyc
 *.pyo
 .pytest_cache
-*.db
-*.sqlite
-*.sqlite3
 .git
 .vscode
 .idea

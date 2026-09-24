@@ -1,10 +1,10 @@
 import os
-import tempfile
 from datetime import date
 
-_tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp.close()
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp.name}"
+from backend.tests.db_setup import DEFAULT_TEST_DATABASE_URL, ensure_test_database
+
+os.environ.setdefault("DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+ensure_test_database(os.environ["DATABASE_URL"])
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from backend.app.database import Base, get_db  # noqa: E402
 from backend.app.main import app  # noqa: E402
 
-engine = create_engine(os.environ["DATABASE_URL"], connect_args={"check_same_thread": False})
+engine = create_engine(os.environ["DATABASE_URL"])
 TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)

@@ -4,8 +4,7 @@
 
 - `backend/app/config.py` reads `DATABASE_URL`,
   default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`.
-- `backend/app/database.py` builds the SQLAlchemy engine (with `pool_pre_ping`
-  and `check_same_thread: False` for SQLite test overrides only).
+- `backend/app/database.py` builds the SQLAlchemy engine (with `pool_pre_ping`).
 - `docker-compose.yaml` runs Postgres (`db`) + the app and points `DATABASE_URL`
   at the `db` host. Local API against local Postgres:
 
@@ -14,6 +13,15 @@ DATABASE_URL=postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist uvi
 ```
 
 No code change needed — models use portable types only.
+
+## Tests
+
+- `backend/tests/test_api.py` and `backend/tests/test_actions.py` run the API
+  through HTTP against Postgres. They default to a dedicated `waitlist_test`
+  database on the `DATABASE_URL` host (`backend/tests/db_setup.py` creates it
+  when missing) and honor a preset `DATABASE_URL`, so CI can point them at any
+  Postgres. Provide one locally with `docker compose up -d db`, then
+  `python -m pytest backend/tests -q`.
 
 ## Tables (see `backend/app/models.py`)
 

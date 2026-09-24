@@ -6,6 +6,9 @@ Local-first restaurant waitlist. No Supabase, no Bolt.
 backend/      # FastAPI + SQLAlchemy app and its tests. Postgres via `DATABASE_URL`
 docs/         # supporting documentation (architecture, api, database)
 frontend/     # Vite + React + TS app (services layer, mock backend by default)
+e2e/          # Playwright end-to-end tests against the compose stack
+Dockerfile    # single image: frontend build served from the backend
+docker-compose.yaml  # local Postgres (db) + app stack
 AGENTS.md     # instructions for coding agents
 CLAUDE.md     # imports AGENTS.md
 openapi.yaml  # API agreement — open in Swagger
@@ -67,9 +70,24 @@ Hobby ($5/mo incl. $5 usage credit) comfortably fits one small app + Postgres.
 
 ## Tests
 
+Backend tests need Postgres at `localhost:5432`
+(`docker compose up -d db` provides it; a `waitlist_test` database is
+created automatically and a preset `DATABASE_URL` is honored):
+
 ```sh
 cd frontend; npm test
 python -m pytest backend/tests -q
 ```
+
+E2E (Playwright, needs the compose stack up):
+
+```sh
+docker compose up --build -d
+cd e2e; npm install; npx playwright install chromium; npm test
+```
+
+CI (`.github/workflows/ci.yml`) runs backend + frontend tests in parallel,
+then builds the compose stack and runs the pytest suite against real Postgres
+plus the Playwright E2E suite against the stacked app.
 
 See `docs/`, `frontend/README.md`, `backend/README.md`.

@@ -4,6 +4,11 @@
 
 - `backend/` — FastAPI + SQLAlchemy app and its tests. Postgres via `DATABASE_URL`.
 - `frontend/` — Vite + React + TypeScript app. All backend calls go through `frontend/src/services/`.
+- `e2e/` — Playwright end-to-end tests, run against the compose stack (`E2E_BASE_URL`).
+- `.github/workflows/ci.yml` — backend + frontend test jobs in parallel, then pytest
+  against real Postgres and Playwright E2E against the composed app.
+- `Dockerfile` — single image: builds the frontend, serves it from the backend.
+- `docker-compose.yaml` — local `db` (Postgres) + `app` stack.
 - `docs/` — supporting documentation.
 - `openapi.yaml` — the API agreement. Source of truth for the HTTP contract.
 
@@ -30,9 +35,12 @@
   (`String`, `Integer`, `Date/DateTime/Time`, `Text`) — no Postgres-only types.
 - IDs are `String(36)` UUIDs.
 - Connection comes from `DATABASE_URL` (`backend/app/config.py`,
-  default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`).
+  default `postgresql+psycopg2://waitlist:waitlist@localhost:5432/waitlist`,
+  `postgres://` scheme accepted too).
   `docker-compose.yaml` runs Postgres (`db`) + the app and sets `DATABASE_URL`
-  to the `db` host. Tests override `DATABASE_URL` with a temp SQLite file.
+  to the `db` host. Tests use a dedicated `waitlist_test` database on the same
+  host (`backend/tests/db_setup.py` creates it when missing) and honor a
+  preset `DATABASE_URL`, so CI can point them at any Postgres.
 - Schema is created via `Base.metadata.create_all` on startup (with retry while
   the DB becomes reachable); no migration tooling yet.
 
@@ -44,11 +52,29 @@ Frontend (run in `frontend/`):
 - `npm run dev` — mock backend by default; real API with `VITE_USE_MOCK=false VITE_API_URL=http://localhost:8000 npm run dev`
 - `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`
 
-Backend (run in repo root):
+Backend (run in repo root, needs Postgres at `localhost:5432` —
+`docker compose up -d db` provides it):
 
 - `pip install -r backend/requirements.txt`
 - `uvicorn backend.app.main:app --reload --port 8000`
 - `python -m pytest backend/tests -q`
+
+E2E (Playwright in `e2e/`, runs against the compose stack at `E2E_BASE_URL`,
+default `http://localhost:8000`):
+
+- `docker compose up --build -d`
+- `cd e2e; npm install; npx playwright install chromium; npm test`
+
+CI (`.github/workflows/ci.yml`): backend + frontend test jobs in parallel,
+then a stack job that builds compose, runs pytest against real Postgres and
+Playwright E2E against the app.
+
+## Personality
+
+- Address the user with dry British wit: understated, a little cheeky, never
+  cruel, and never at the expense of clarity. Short and to the point.
+- Commit messages should be funny but still say what changed: one witty
+  headline, then a plain-English body a stranger could understand.
 
 ## Rules
 
